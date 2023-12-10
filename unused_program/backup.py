@@ -1,9 +1,11 @@
+#研究途中まで使用したプログラム。このプログラムからgurafu.pyとrealsense_excel.pyを作成。
 import cv2
 import numpy as np
 import time
 import pyrealsense2 as pyrs2
 import mediapipe as mp
-import openpyxl
+import matplotlib.pyplot as plt
+from scipy import signal
 
 def main():
 # カメラの設定
@@ -41,20 +43,14 @@ def main():
     mp_drawing_styles = mp.solutions.drawing_styles
     mp_pose = mp.solutions.pose
 
-# 映像のための繰り返し
-    count=1
-
-    wb = openpyxl.load_workbook('Book1.xlsx')
-    ws = wb.active
-    for row in ws:
-        for cell in row:
-            cell.value = None
-    wb.save("Book1.xlsx")
+    elapsed_time = 0
+    time_arry = []
+    val_arry = []
 
     with mp_pose.Pose(
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5) as pose:  #poseを使う宣言と設定
-        while True:
+        while elapsed_time<=62:
             # フレーム情報を取得
             frames = cap.wait_for_frames()
 
@@ -74,14 +70,12 @@ def main():
             depth_color_frame = pyrs2.colorizer().colorize(depth_frame)
             depth_image = np.asanyarray(depth_color_frame.get_data())
 
-
             # 画像の書き換えを不可にする。パフォーマンス向上のため。
             color_image.flags.writeable = False
 
             # OpenCVとMediaPipeでRGBの並びが違うため、処理前に変換しておく。
             # CV2:BGR → MediaPipe:RGB
             color_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
-
 
             ht, wt, _ = color_image.shape
 
@@ -99,7 +93,6 @@ def main():
                     pose_points.append([x, y, z, point.visibility])
                 pose_list.append(pose_points)
 
-            
              # 前処理の変換を戻しておく。
             color_image.flags.writeable = True
             color_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR)
@@ -113,25 +106,19 @@ def main():
                 # print("(x,y,z)=", poseKeys[12][0], poseKeys[12][1], poseKeys[11][2])
 
             #四角形の中の深度を平均化して値をだす。
-            right_sholder_x = poseKeys[11][0]
-            left_sholder_x = poseKeys[12][0]
-            right_sholder_y = poseKeys[11][1]+170
-            left_sholder_y = poseKeys[12][1]
+            right_sholder_x = poseKeys[11][0] -30
+            left_sholder_x = poseKeys[12][0] + 30
+            right_sholder_y = poseKeys[11][1]+60
+            left_sholder_y = poseKeys[12][1]+30
             # numpyのmean関数は、配列の要素の平均を取ってくれる。
             ave = depth_image[left_sholder_y:right_sholder_y,left_sholder_x:right_sholder_x]
             mean3 = np.mean(ave) #a3の空間内の配列要素の平均を取る
             t2 = time.time() #波形成のために時間とる。
             elapsed_time = t2-t1
 
-            # print("%f" % elapsed_time, "  %f " % mean3)
-
-
-            wb = openpyxl.load_workbook('Book1.xlsx')
-            ws = wb.active
-            ws.cell(row=count,column=1,value = elapsed_time)
-            ws.cell(row=count,column=2,value = mean3)
-            count = count + 1
-            wb.save("Book1.xlsx")
+            if(elapsed_time>=2 and elapsed_time<=120):
+                time_arry.append(elapsed_time)
+                val_arry.append(mean3)
 
         # 映像の表示と四角形のレンダリング
             # 設定
@@ -140,23 +127,38 @@ def main():
             images = np.hstack((color_image, depth_colormap)) #depth_imageに変えたら深度カメラを表示できる
 
             # 四角形を作る線の形成
-            cv2.rectangle(images,(poseKeys[11][0],poseKeys[11][1]), (poseKeys[12][0], poseKeys[12][1] + 170), color=(0,0,255),thickness= 4)
-
+            cv2.rectangle(images,(right_sholder_x,right_sholder_y), (left_sholder_x, left_sholder_y), color=(0,0,255),thickness= 4)
 
             # 映像の表示
             cv2.imshow('RealSense', images)
-
 
             # q押したら終了
             if cv2.waitKey(1) &  0xFF == ord('q'):
                 break
 
-        
-
         # カメラの解放
         cap.stop()
         cv2.destroyAllWindows()
-   
+
+        sample_freq = 30
+        cutoff_freq1 = 1 #0.05(20秒で1回の呼吸)Hz以上の周波数を除去する。
+        filter_order = 2
+
+        cutoff_freq2 = 0.3 #8秒に１回なら0.125
+
+        sos = signal.butter(filter_order, cutoff_freq1, 'lowpass', output='sos', fs=sample_freq)
+        sos2 = signal.butter(filter_order, cutoff_freq2, 'lowpass', output='sos', fs=sample_freq)
+        val_arry1 = signal.sosfiltfilt(sos, val_arry)
+        val_arry2 = signal.sosfiltfilt(sos2, val_arry)
+
+        fig, ax = plt.subplots()
+
+        ax.plot(time_arry,val_arry1-val_arry2)
+        # ax[1].plot(time_arry,val_arry)
+        plt.ylim(-10.0,10.0)
+ 
+        plt.show()
+        fig.savefig("figure.jpg")
 
 # run---------------------------------------------------------------------------------------
 if __name__ == '__main__':

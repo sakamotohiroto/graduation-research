@@ -1,3 +1,5 @@
+#realsenseのカメラで呼吸を測定し、距離データにローパスフィルタをかけてから
+#excelファイルにデータをいれるプログラム
 import cv2
 import numpy as np
 import time
@@ -63,7 +65,7 @@ def main():
     with mp_pose.Pose(
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5) as pose:  #poseを使う宣言と設定
-        while elapsed_time<=62:
+        while elapsed_time<=75:
             # フレーム情報を取得
             frames = cap.wait_for_frames()
 
@@ -118,8 +120,6 @@ def main():
                 poseKeys = pose_list[0]     # sholder_l = pose[11]; sholder_l[0]...x座標，sholder_l[1]...y座標
                 for point in poseKeys:
                     cv2.circle(color_image, (point[0], point[1]), 5, [0,255, 0], -1)
-                # print("(x,y,z)=", poseKeys[11][0], poseKeys[11][1], poseKeys[11][2])
-                # print("(x,y,z)=", poseKeys[12][0], poseKeys[12][1], poseKeys[11][2])
 
             #四角形の中の深度を平均化して値をだす。
             right_sholder_x = poseKeys[11][0]-30
@@ -172,10 +172,6 @@ def main():
             ws.cell(i+1,1,value=time_arry[i])
             ws.cell(i+1,2,value=val_arry1[i]-val_arry2[i])
         wb.save("Book1.xlsx")
-        # for i in range(0,len(time_arry)):
-        #     print(val_arry[i])
-
-   
 
 # run---------------------------------------------------------------------------------------
 if __name__ == '__main__':
